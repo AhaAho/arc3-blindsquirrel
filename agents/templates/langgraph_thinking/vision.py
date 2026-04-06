@@ -23,6 +23,7 @@ COLOR_PALETTE = {
     # Top of player - 12
 }
 SCALE_FACTOR = 15
+HighlightCoords = tuple[tuple[int, int], tuple[int, int]]
 
 
 def extract_rect_from_render(
@@ -222,7 +223,7 @@ def render_frame(
 
 def add_highlight(
     draw: ImageDraw.ImageDraw,
-    coords: ImageDraw.Coords,
+    coords: HighlightCoords,
     label: str,
 ) -> None:
     (x1, y1), (x2, y2) = coords

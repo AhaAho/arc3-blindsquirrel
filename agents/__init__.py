@@ -3,6 +3,7 @@ from typing import Type, cast
 from dotenv import load_dotenv
 
 from .agent import Agent, Playback
+from .blind_squirrel import BlindSquirrel
 from .recorder import Recorder
 from .swarm import Swarm
 from .templates.langgraph_functional_agent import LangGraphFunc, LangGraphTextOnly
@@ -48,4 +49,5 @@ __all__ = [
     "Playback",
     "AVAILABLE_AGENTS",
     "MultiModalLLM",
+    "BlindSquirrel",
 ]

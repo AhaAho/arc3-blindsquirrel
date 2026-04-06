@@ -16,6 +16,7 @@ from types import FrameType
 from typing import Optional
 
 import requests
+from arc_agi import Arcade, OperationMode
 
 from agents import AVAILABLE_AGENTS, Swarm
 from agents.tracing import initialize as init_agentops
@@ -37,6 +38,18 @@ HEADERS = {
     "X-API-Key": os.getenv("ARC_API_KEY", ""),
     "Accept": "application/json",
 }
+
+
+def _configured_operation_mode() -> OperationMode:
+    raw_mode = os.getenv("OPERATION_MODE", "").strip().lower()
+    if raw_mode in OperationMode._value2member_map_:
+        return OperationMode(raw_mode)
+    return OperationMode.NORMAL
+
+
+def _get_local_games() -> list[str]:
+    arc = Arcade(operation_mode=OperationMode.OFFLINE)
+    return sorted({env.game_id for env in arc.get_environments() if env.game_id})
 
 
 def run_agent(swarm: Swarm) -> None:
@@ -70,6 +83,7 @@ def main() -> None:
     log_level = logging.INFO
     if os.environ.get("DEBUG", "False") == "True":
         log_level = logging.DEBUG
+    log_path = os.environ.get("RUN_LOG_PATH", "logs.log")
 
     logger.setLevel(log_level)
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
@@ -78,7 +92,7 @@ def main() -> None:
     stdout_handler.setLevel(log_level)
     stdout_handler.setFormatter(formatter)
 
-    file_handler = logging.FileHandler("logs.log", mode="w")
+    file_handler = logging.FileHandler(log_path, mode="w")
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)
 
@@ -118,24 +132,33 @@ def main() -> None:
 
     # Get the list of games from the API
     full_games = []
-    try:
-        with requests.Session() as session:
-            session.headers.update(HEADERS)
-            r = session.get(f"{ROOT_URL}/api/games", timeout=10)
+    if _configured_operation_mode() is OperationMode.OFFLINE:
+        full_games = _get_local_games()
+        logger.info("Using locally cached games in offline mode")
+    else:
+        try:
+            with requests.Session() as session:
+                session.headers.update(HEADERS)
+                r = session.get(f"{ROOT_URL}/api/games", timeout=10)
 
-        if r.status_code == 200:
-            try:
-                full_games = [g["game_id"] for g in r.json()]
-            except (ValueError, KeyError) as e:
-                logger.error(f"Failed to parse games response: {e}")
-                logger.error(f"Response content: {r.text[:200]}")
-        else:
-            logger.error(
-                f"API request failed with status {r.status_code}: {r.text[:200]}"
-            )
+            if r.status_code == 200:
+                try:
+                    full_games = [g["game_id"] for g in r.json()]
+                except (ValueError, KeyError) as e:
+                    logger.error(f"Failed to parse games response: {e}")
+                    logger.error(f"Response content: {r.text[:200]}")
+            else:
+                logger.error(
+                    f"API request failed with status {r.status_code}: {r.text[:200]}"
+                )
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to connect to API server: {e}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to connect to API server: {e}")
+
+        if not full_games:
+            full_games = _get_local_games()
+            if full_games:
+                logger.info("Using locally cached games as API fallback")
 
     # For playback agents, we can derive the game from the recording filename
     if not full_games and args.agent and args.agent.endswith(".recording.jsonl"):

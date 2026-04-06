@@ -53,6 +53,7 @@ class Swarm:
         }
         self.tags = tags.copy() if tags is not None else []
         self._arc = Arcade()
+        self._device_cycle = self._resolve_device_cycle()
 
         # Set up base tags for tracing
         if self.agent_name.endswith(".recording.jsonl"):
@@ -63,6 +64,22 @@ class Swarm:
             self.tags.extend(["playback", guid])
         else:
             self.tags.extend(["agent", self.agent_name])
+
+    def _resolve_device_cycle(self) -> list[str]:
+        if self.agent_name != "blindsquirrel":
+            return []
+        raw_devices = os.getenv("BLINDSQUIRREL_DEVICES", "")
+        devices = [device.strip() for device in raw_devices.split(",") if device.strip()]
+        if devices:
+            logger.info("Using BlindSquirrel device cycle: %s", devices)
+        return devices
+
+    def _get_agent_kwargs(self, index: int, game_id: str) -> dict[str, str]:
+        if not self._device_cycle:
+            return {}
+        device = self._device_cycle[index % len(self._device_cycle)]
+        logger.info("Assigning %s to device %s", game_id, device)
+        return {"device": device}
 
     def main(self) -> EnvironmentScorecard | None:
         """The main orchestration loop, continues until all agents are done."""
@@ -75,6 +92,7 @@ class Swarm:
         # create all the agents
         for i in range(len(self.GAMES)):
             g = self.GAMES[i % len(self.GAMES)]
+            agent_kwargs = self._get_agent_kwargs(i, g)
             a = self.agent_class(
                 card_id=self.card_id,
                 game_id=g,
@@ -83,6 +101,7 @@ class Swarm:
                 record=True,
                 arc_env=self._arc.make(g, scorecard_id=self.card_id),
                 tags=self.tags,
+                **agent_kwargs,
             )
             self.agents.append(a)
 
