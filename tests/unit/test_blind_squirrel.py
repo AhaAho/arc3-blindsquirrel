@@ -4,7 +4,7 @@ import pytest
 import torch
 from arcengine import FrameData, GameAction, GameState
 
-from agents.blind_squirrel import ACTION7_INDEX, BlindSquirrel, State
+from agents.blind_squirrel import ACTION7_INDEX, BlindSquirrel, State, StateGraph
 
 
 def make_frame(
@@ -93,3 +93,30 @@ def test_move_batch_to_device_moves_every_tensor_like_value():
 
     assert moved == batch
     assert all(tensor.seen_devices == [device] for tensor in batch.values())
+
+
+@pytest.mark.unit
+def test_state_graph_zeroes_actions_that_return_to_current_milestone():
+    graph = StateGraph(torch.device("cpu"))
+    milestone = State(make_frame(available_actions=[1, 6]))
+    detour = State(
+        make_frame(
+            available_actions=[1, 6],
+            game_id="ft09",
+        )
+    )
+    detour.frame = tuple(
+        tuple(cell + 1 for cell in row)
+        for row in detour.frame  # type: ignore[arg-type]
+    )
+
+    action = 0
+    graph.add_init_state(milestone)
+    graph.states.add(milestone)
+    graph.states.add(detour)
+    detour.action_rweights[action] = 1
+
+    graph.update(detour, action, milestone)
+
+    assert graph.action_counter[(detour.game_id, detour.score, action)] == [0, 1]
+    assert detour.action_rweights[action] == 0

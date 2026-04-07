@@ -502,11 +502,14 @@ class StateGraph:
             logger.warning("Bad action detected for %s", game_id)
             return
 
+        if new_state == self.milestones.get((game_id, score)):
+            self.action_counter[(game_id, score, action)][1] += 1
+            prev_state.action_rweights[action] = 0
+            prev_state.zero_back()
+            return
+
         self.action_counter[(game_id, score, action)][1] += 1
         prev_state.action_rweights[action] = 1
-
-        if new_state == self.milestones.get((game_id, score)):
-            return
 
         if new_state.score > prev_state.score:
             self.add_milestone(new_state)
